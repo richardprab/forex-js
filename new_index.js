@@ -2,9 +2,9 @@ import puppeteer from 'puppeteer';
 
 // Lark Configuration
 const LARK_CONFIG = {
-    APP_ID: 'cli_your_actual_app_id_here',
-    APP_SECRET: 'your_actual_app_secret_here',
-    SPREADSHEET_TOKEN: 'KUNHs3CFVhsub2tCf7LlOXeEgUe',
+    APP_ID: 'x',
+    APP_SECRET: 'y',
+    SPREADSHEET_TOKEN: 'z',
 
 };
 
@@ -26,35 +26,22 @@ const BANK_CONFIGS = {
 // Get access token for Lark API
 async function getAccessToken() {
     try {
-        console.log('Getting access token...');
-        console.log('APP_ID:', LARK_CONFIG.APP_ID);
-        console.log('APP_SECRET length:', LARK_CONFIG.APP_SECRET ? LARK_CONFIG.APP_SECRET.length : 'undefined');
-        
-        const requestBody = {
-            app_id: LARK_CONFIG.APP_ID,
-            app_secret: LARK_CONFIG.APP_SECRET
-        };
-        
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
-        
         const response = await fetch('https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                app_id: LARK_CONFIG.APP_ID,
+                app_secret: LARK_CONFIG.APP_SECRET
+            })
         });
 
-        console.log('Response status:', response.status);
         const data = await response.json();
-        console.log('Response data:', JSON.stringify(data, null, 2));
-        
         if (data.code === 0) {
-            console.log('Access token obtained successfully');
             return data.tenant_access_token;
         } else {
             console.error('Failed to get access token:', data.msg);
-            console.error('Error code:', data.code);
             return null;
         }
     } catch (error) {
@@ -67,12 +54,8 @@ async function getAccessToken() {
 async function findSheetID() {
     try {
         const accessToken = await getAccessToken();
-        if (!accessToken) {
-            console.log('No access token for sheet lookup');
-            return null;
-        }
+        if (!accessToken) return null;
 
-        console.log('Looking up sheets in spreadsheet...');
         const response = await fetch(`https://open.larksuite.com/open-apis/sheets/v3/spreadsheets/${LARK_CONFIG.SPREADSHEET_TOKEN}/sheets/query`, {
             method: 'GET',
             headers: {
@@ -82,14 +65,9 @@ async function findSheetID() {
         });
 
         const result = await response.json();
-        console.log('Sheet lookup response:', result);
         
         if (result.code === 0 && result.data.sheets.length > 0) {
-            const sheetId = result.data.sheets[0].sheet_id;
-            console.log(`Using sheet: ${result.data.sheets[0].title} (ID: ${sheetId})`);
-            return sheetId;
-        } else {
-            console.log('No sheets found or error:', result.msg);
+            return result.data.sheets[0].sheet_id;
         }
     } catch (error) {
         console.error('Error finding sheet ID:', error);
@@ -101,42 +79,45 @@ async function findSheetID() {
 // Send data to Lark spreadsheet
 async function sendToLarkSheet(bankData) {
     try {
-        console.log(`Attempting to send ${bankData.bank} data to spreadsheet...`);
-        
         const accessToken = await getAccessToken();
-        if (!accessToken) {
-            console.log('Failed to get access token for sheet write');
-            return;
-        }
+        if (!accessToken) return;
 
         const sheetId = await findSheetID();
-        if (!sheetId) {
-            console.log('Failed to get sheet ID');
-            return;
-        }
+        if (!sheetId) return;
 
-        const timestamp = new Date().toLocaleString('en-US', { 
+        const currentDate = new Date();
+        const jakartaDate = currentDate.toLocaleDateString('en-GB', { 
             timeZone: 'Asia/Jakarta',
-            year: 'numeric',
-            month: '2-digit',
             day: '2-digit',
+            month: 'short',
+            year: '2-digit'
+        });
+        
+        const jakartaTime = currentDate.toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Jakarta',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit'
+            hour12: false
         });
+
+        // Determine transaction type based on buy/sell rates
+        const transactionType = bankData.buyRate > bankData.sellRate ? "Withdrawal" : "Deposit";
 
         const values = [
             [
-                timestamp,
-                bankData.bank,
-                bankData.currency,
-                bankData.buyRate,
-                bankData.sellRate
+                jakartaDate,        // Date (23-May-25)
+                transactionType,    // Type (Deposit/Withdrawal)
+                jakartaTime,        // Cut Off Time (10:00)
+                "",                 // Gotrade Indo (empty)
+                "",                 // Gotrade Global (empty)
+                "",                 // Pluang (empty)
+                "",                 // Reku (empty)
+                bankData.bank === 'CIMB' ? bankData.buyRate : "", // CIMB buy rate
+                bankData.bank === 'CIMB' ? bankData.sellRate : "", // CIMB sell rate  
+                bankData.bank === 'BCA' ? bankData.buyRate : "",   // BCA buy rate
+                bankData.bank === 'BCA' ? bankData.sellRate : ""   // BCA sell rate
             ]
         ];
-
-        console.log('Data to send:', values[0]);
-        console.log(`Writing to sheet ${sheetId} range A:E`);
 
         const response = await fetch(`https://open.larksuite.com/open-apis/sheets/v2/spreadsheets/${LARK_CONFIG.SPREADSHEET_TOKEN}/values_append`, {
             method: 'POST',
@@ -146,19 +127,18 @@ async function sendToLarkSheet(bankData) {
             },
             body: JSON.stringify({
                 valueRange: {
-                    range: `${sheetId}!A:E`,
+                    range: `${sheetId}!A:K`,
                     values: values
                 }
             })
         });
 
         const result = await response.json();
-        console.log('Sheet write response:', result);
         
         if (result.code === 0) {
-            console.log(`${bankData.bank} data successfully added to spreadsheet`);
+            console.log(`${bankData.bank} data sent to Lark spreadsheet`);
         } else {
-            console.error(`Failed to add ${bankData.bank} data: ${result.msg}`);
+            console.error(`Failed to send ${bankData.bank} data:`, result.msg);
         }
 
     } catch (error) {
@@ -166,7 +146,7 @@ async function sendToLarkSheet(bankData) {
     }
 }
 
-const bank_parser = async (bank) => {
+const cimb_parser = async (bank) => {
     const config = BANK_CONFIGS[bank.toUpperCase()];
     if (!config) throw new Error(`Unsupported bank: ${bank}`);
 
@@ -191,13 +171,26 @@ const bank_parser = async (bank) => {
                 currency = cells[0]?.innerText.trim();
                 buy = cells[1]?.innerText.trim();
                 sell = cells[2]?.innerText.trim();
+                
+                // Clean and convert CIMB numbers to numeric values
+                if (currency === 'USD' && buy && sell) {
+                    buy = buy.replace(/[^\d.]/g, '');
+                    sell = sell.replace(/[^\d.]/g, '');
+                }
             } else if (bankName === 'BCA') {
                 const firstCell = cells[0]?.innerText.trim();
                 
                 if (firstCell.includes('USD')) {
                     currency = 'USD';
-                    buy = cells[1]?.innerText.trim();
-                    sell = cells[2]?.innerText.trim();
+                    const buyText = cells[1]?.innerText.trim();
+                    const sellText = cells[2]?.innerText.trim();
+                    
+                    // Clean and convert BCA numbers to numeric values
+                    const buyStr = buyText.replace(/[^\d.,]/g, '').replace(',', '.');
+                    const sellStr = sellText.replace(/[^\d.,]/g, '').replace(',', '.');
+                    
+                    buy = buyStr;
+                    sell = sellStr;
                 }
             }
             
@@ -226,5 +219,5 @@ const bank_parser = async (bank) => {
 };
 
 // Run for both banks
-bank_parser('CIMB');
-bank_parser('BCA');
+cimb_parser('CIMB');
+cimb_parser('BCA');
