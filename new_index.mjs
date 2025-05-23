@@ -1,11 +1,21 @@
 import puppeteer from 'puppeteer';
-import secrets from './secrets.json' with { type: 'json' };
+import { readFile } from 'fs/promises';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+// Read and parse secrets.json
+const raw = await readFile(new URL('./secrets.json', import.meta.url), 'utf-8');
+const secrets = JSON.parse(raw);
 
 const LARK_CONFIG = {
-    APP_ID: secrets.APP_ID,
-    APP_SECRET: secrets.APP_SECRET,
-    SPREADSHEET_TOKEN: secrets.SPREADSHEET_TOKEN,
+  APP_ID:           secrets.APP_ID,
+  APP_SECRET:       secrets.APP_SECRET,
+  SPREADSHEET_TOKEN: secrets.SPREADSHEET_TOKEN,
 };
+
 
 const BANK_CONFIGS = {
     CIMB: {
