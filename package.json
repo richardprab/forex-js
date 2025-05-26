@@ -1,19 +1,17 @@
 {
-  "name": "forex_js",
+  "name": "forex-scraper-cloudrun",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Automated forex scraper for CIMB and BCA banks",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node new_index.mjs"
+    "start": "node server.js",
+    "test": "node scraper.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "puppeteer": "^24.8.2"
+    "express": "^4.18.2",
+    "puppeteer": "^21.5.0"
   },
-  "type": "module",
-  "devDependencies": {},
-  "types": "module"
+  "engines": {
+    "node": "18"
+  }
 }
