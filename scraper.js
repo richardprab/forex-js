@@ -1,5 +1,5 @@
 // scraper.js - Main scraping logic
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright-chromium');
 
 // Get configuration from environment variables
 const LARK_CONFIG = {
@@ -188,16 +188,12 @@ const bank_parser = async (bank) => {
 
   console.log(`Starting ${bank} scraper...`);
   
-  const browser = await puppeteer.launch({ 
+  const browser = await chromium.launch({ 
     headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-zygote',
-      '--single-process', // Important for Cloud Run
-      '--disable-gpu'
+      '--disable-dev-shm-usage'
     ]
   });
   
