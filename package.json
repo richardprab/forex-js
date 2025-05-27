@@ -1,16 +1,16 @@
 {
   "name": "forex-scraper-cloudrun",
-  "version": "1.0.0",
+  "version": "1.0.0", 
   "description": "Automated forex scraper for CIMB and BCA banks",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node scraper.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "test": "node scraper.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "playwright-chromium": "^1.40.0"
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12"
   },
   "engines": {
     "node": ">=18"

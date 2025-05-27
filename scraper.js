@@ -1,5 +1,6 @@
-// scraper.js - Main scraping logic
-const { chromium } = require('playwright-chromium');
+// scraper.js - Main scraping logic with HTTP requests
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 // Get configuration from environment variables
 const LARK_CONFIG = {
@@ -188,67 +189,55 @@ const bank_parser = async (bank) => {
 
   console.log(`Starting ${bank} scraper...`);
   
-  const browser = await chromium.launch({ 
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage'
-    ]
-  });
-  
-  const page = await browser.newPage();
-  const url = config.url;
-
   try {
-    await page.goto(url, { 
-      waitUntil: "domcontentloaded",
-      timeout: 30000 
+    const response = await axios.get(config.url, {
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
-    await page.waitForSelector(config.selector, { timeout: 15000 });
 
-    const usd = await page.evaluate(
-      (selector, bankName) => {
-        const rows = document.querySelectorAll(selector);
+    const $ = cheerio.load(response.data);
+    let usd = null;
 
-        for (const row of rows) {
-          const cells = row.querySelectorAll("td");
-          if (cells.length < 3) continue;
+    if (bank.toUpperCase() === "CIMB") {
+      $('table tr').each((i, row) => {
+        const cells = $(row).find('td');
+        if (cells.length >= 3) {
+          const currency = $(cells[0]).text().trim();
+          const buy = $(cells[1]).text().trim();
+          const sell = $(cells[2]).text().trim();
 
-          let currency, buy, sell;
-
-          if (bankName === "CIMB") {
-            currency = cells[0]?.innerText.trim();
-            buy = cells[1]?.innerText.trim();
-            sell = cells[2]?.innerText.trim();
-
-            if (currency === "USD" && buy && sell) {
-              return {
-                buyRate: parseFloat(buy),
-                sellRate: parseFloat(sell),
-              };
-            }
-          } else if (bankName === "BCA") {
-            const firstCell = cells[0]?.innerText.trim();
-            if (firstCell.includes("USD")) {
-              const buyText = cells[1]?.innerText.trim();
-              const sellText = cells[2]?.innerText.trim();
-
-              const buyParts = buyText.replace(/[^\d.,]/g, "").split(",");
-              const sellParts = sellText.replace(/[^\d.,]/g, "").split(",");
-
-              return {
-                buyRate: parseInt(buyParts[0].replace(/\./g, "")),
-                sellRate: parseInt(sellParts[0].replace(/\./g, "")),
-              };
-            }
+          if (currency === "USD" && buy && sell) {
+            usd = {
+              buyRate: parseFloat(buy),
+              sellRate: parseFloat(sell),
+            };
+            return false; // break
           }
         }
-        return null;
-      },
-      config.selector,
-      bank.toUpperCase()
-    );
+      });
+    } else if (bank.toUpperCase() === "BCA") {
+      $('table tbody tr').each((i, row) => {
+        const cells = $(row).find('td');
+        if (cells.length >= 3) {
+          const firstCell = $(cells[0]).text().trim();
+          if (firstCell.includes("USD")) {
+            const buyText = $(cells[1]).text().trim();
+            const sellText = $(cells[2]).text().trim();
+
+            const buyParts = buyText.replace(/[^\d.,]/g, "").split(",");
+            const sellParts = sellText.replace(/[^\d.,]/g, "").split(",");
+
+            usd = {
+              buyRate: parseInt(buyParts[0].replace(/\./g, "")),
+              sellRate: parseInt(sellParts[0].replace(/\./g, "")),
+            };
+            return false; // break
+          }
+        }
+      });
+    }
 
     if (usd) {
       console.log(`${bank}: Buy ${usd.buyRate}, Sell ${usd.sellRate}`);
@@ -257,8 +246,9 @@ const bank_parser = async (bank) => {
     } else {
       throw new Error(`${bank}: USD data not found`);
     }
-  } finally {
-    await browser.close();
+  } catch (error) {
+    console.error(`${bank} scraper error:`, error.message);
+    throw error;
   }
 };
 
